@@ -1,0 +1,12 @@
+{
+  "name": "auth-chefgroep-static",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Static Cloudflare Pages auth landing page for ChefGroep",
+  "scripts": {
+    "serve": "python3 -m http.server 8788",
+    "start": "npm run serve",
+    "check:static": "test -f index.html && test -f _headers && test -f _redirects && rg -n \"^/\\\\*$|^Content-Security-Policy:\" _headers && rg -n \"<meta charset=|<title>|<script>\" index.html",
+    "check:headers": "rg -n \"Content-Security-Policy|Strict-Transport-Security|X-Frame-Options|Referrer-Policy\" _headers"
+  }
+}
