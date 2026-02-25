@@ -127,6 +127,43 @@
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
     }
+    .btn-primary:disabled {
+      opacity: 0.55;
+      cursor: wait;
+      transform: none;
+      box-shadow: none;
+    }
+    .status-box {
+      display: none;
+      margin-bottom: 1rem;
+      padding: 0.75rem 0.875rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.06);
+      font-size: 0.8125rem;
+      line-height: 1.4;
+    }
+    .status-box.show { display: block; }
+    .status-box.info {
+      color: #bae6fd;
+      background: rgba(14,165,233,0.09);
+      border-color: rgba(14,165,233,0.25);
+    }
+    .status-box.error {
+      color: #fecaca;
+      background: rgba(239,68,68,0.08);
+      border-color: rgba(239,68,68,0.22);
+    }
+    .status-box.success {
+      color: #bbf7d0;
+      background: rgba(16,185,129,0.08);
+      border-color: rgba(16,185,129,0.24);
+    }
+    .helper-text {
+      margin-top: 0.5rem;
+      color: #71717a;
+      font-size: 0.75rem;
+      line-height: 1.35;
+    }
     .back-link {
       display: block; text-align: center; margin-top: 1.5rem;
       color: #71717a; font-size: 0.8125rem;
@@ -155,21 +192,24 @@
       </div>
 
       <div class="tabs">
-        <button class="tab active" data-tab="login">Sign In</button>
-        <button class="tab" data-tab="register">Create Account</button>
+        <button class="tab active" data-tab="login" type="button">Sign In</button>
+        <button class="tab" data-tab="register" type="button">Access Request</button>
       </div>
 
+      <div id="statusBox" class="status-box" role="status" aria-live="polite"></div>
+
       <div id="login" class="panel active">
-        <form onsubmit="handleLogin(event)">
+        <form id="loginForm" onsubmit="handleLogin(event)">
           <div class="form-group">
-            <label>EMAIL ADDRESS</label>
-            <input type="email" name="email" required placeholder="sys@admin.local">
+            <label>USERNAME</label>
+            <input type="text" name="username" required placeholder="joep" autocomplete="username">
           </div>
           <div class="form-group">
             <label>PASSWORD</label>
-            <input type="password" name="password" required placeholder="••••••••">
+            <input type="password" name="password" required placeholder="••••••••" autocomplete="current-password">
           </div>
-          <button type="submit" class="btn-primary">Authenticate</button>
+          <button type="submit" class="btn-primary" id="loginBtn">Authenticate</button>
+          <p class="helper-text">Na login sturen we je terug naar de gewenste ChefGroep-site.</p>
         </form>
       </div>
 
@@ -180,24 +220,71 @@
             <input type="text" name="name" required placeholder="Operator">
           </div>
           <div class="form-group">
-            <label>EMAIL ADDRESS</label>
-            <input type="email" name="email" required placeholder="sys@admin.local">
+            <label>USERNAME / EMAIL</label>
+            <input type="text" name="email" required placeholder="operator">
           </div>
           <div class="form-group">
             <label>PASSWORD</label>
             <input type="password" name="password" required minlength="8" placeholder="Min. 8 characters">
           </div>
-          <button type="submit" class="btn-primary">Initialize Access</button>
+          <button type="submit" class="btn-primary">Request Access</button>
+          <p class="helper-text">Self-service registratie staat nog uit. Gebruik dit als aanvraagformulier.</p>
         </form>
       </div>
 
-      <a href="https://chefgroep.nl" class="back-link">← Return to Portal</a>
+      <a id="backLink" href="https://chefgroep.nl" class="back-link">← Return to Portal</a>
     </div>
   </div>
 
   <script>
+    const API_BASE = 'https://api.chefgroep.nl';
+    const AUTH_HOST_SUFFIX = '.chefgroep.nl';
+    const statusBox = document.getElementById('statusBox');
+    const backLink = document.getElementById('backLink');
+    const loginBtn = document.getElementById('loginBtn');
+    const params = new URLSearchParams(window.location.search);
+
+    function safeReturnTo() {
+      const raw = params.get('return_to') || params.get('redirect') || '';
+      if (!raw) return 'https://mc.chefgroep.nl/mission-control';
+      try {
+        const url = new URL(raw, window.location.origin);
+        const isHttps = url.protocol === 'https:';
+        const hostAllowed = url.hostname === 'chefgroep.nl' || url.hostname.endsWith(AUTH_HOST_SUFFIX);
+        return isHttps && hostAllowed ? url.toString() : 'https://mc.chefgroep.nl/mission-control';
+      } catch (_) {
+        return 'https://mc.chefgroep.nl/mission-control';
+      }
+    }
+
+    const returnTo = safeReturnTo();
+    backLink.href = returnTo;
+
+    function setStatus(kind, text) {
+      statusBox.className = `status-box show ${kind}`;
+      statusBox.textContent = text;
+    }
+
+    function clearStatus() {
+      statusBox.className = 'status-box';
+      statusBox.textContent = '';
+    }
+
+    async function checkExistingSession() {
+      try {
+        const res = await fetch(`${API_BASE}/api/me`, { credentials: 'include' });
+        if (!res.ok) return;
+        const me = await res.json().catch(() => null);
+        setStatus('success', `Sessie actief${me?.user ? ` als ${me.user}` : ''}. Doorsturen...`);
+        setTimeout(() => { window.location.href = returnTo; }, 350);
+      } catch (_) {
+        // ignore
+      }
+    }
+
     document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
+        clearStatus();
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         tab.classList.add('active');
@@ -205,12 +292,41 @@
       });
     });
 
-    function handleLogin(e) {
+    async function handleLogin(e) {
       e.preventDefault();
       const form = e.target;
-      const email = form.email.value;
-      // Connect to auth API
-      alert('Authentication flow triggered for: ' + email);
+      const username = (form.username.value || '').trim();
+      const password = form.password.value || '';
+
+      if (!username || !password) {
+        setStatus('error', 'Vul gebruikersnaam en wachtwoord in.');
+        return;
+      }
+
+      loginBtn.disabled = true;
+      setStatus('info', `Authenticatie bezig... Je wordt doorgestuurd naar ${new URL(returnTo).hostname}`);
+
+      try {
+        const res = await fetch(`${API_BASE}/api/auth`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus('error', data.detail || 'Authenticatie mislukt.');
+          return;
+        }
+
+        setStatus('success', `Ingelogd als ${data.user || username}. Doorsturen...`);
+        setTimeout(() => { window.location.href = returnTo; }, 300);
+      } catch (err) {
+        setStatus('error', 'Netwerkfout tijdens inloggen. Probeer opnieuw.');
+      } finally {
+        loginBtn.disabled = false;
+      }
     }
 
     function handleRegister(e) {
@@ -218,9 +334,10 @@
       const form = e.target;
       const name = form.name.value;
       const email = form.email.value;
-      // Connect to auth API
-      alert('Registration flow triggered for: ' + name);
+      setStatus('info', `Access request ontvangen voor ${name || email}. Gebruik voorlopig een bestaand account in Mission Control.`);
     }
+
+    checkExistingSession();
   </script>
 </body>
 </html>
