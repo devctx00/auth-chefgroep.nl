@@ -164,6 +164,59 @@
       font-size: 0.75rem;
       line-height: 1.35;
     }
+    .target-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin: 0 auto 1rem;
+      padding: 0.35rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 229, 255, 0.15);
+      background: rgba(0, 229, 255, 0.05);
+      color: #bae6fd;
+      font-size: 0.7rem;
+      font-family: 'JetBrains Mono', monospace;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .session-actions {
+      display: none;
+      margin-bottom: 1rem;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .session-actions.show {
+      display: flex;
+    }
+    .btn-ghost {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      color: #e4e4e7;
+      border-radius: 8px;
+      padding: 0.6rem 0.8rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .18s ease;
+      flex: 1;
+      min-width: 140px;
+    }
+    .btn-ghost:hover {
+      border-color: rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.05);
+    }
+    .btn-ghost.danger {
+      border-color: rgba(239,68,68,0.22);
+      color: #fecaca;
+      background: rgba(239,68,68,0.06);
+    }
+    .btn-ghost.danger:hover {
+      border-color: rgba(239,68,68,0.35);
+      background: rgba(239,68,68,0.1);
+    }
     .back-link {
       display: block; text-align: center; margin-top: 1.5rem;
       color: #71717a; font-size: 0.8125rem;
@@ -190,6 +243,7 @@
         <h1>Prime Command</h1>
         <p>SECURE AUTHENTICATION</p>
       </div>
+      <div id="targetChip" class="target-chip" title="">TARGET · loading...</div>
 
       <div class="tabs">
         <button class="tab active" data-tab="login" type="button">Sign In</button>
@@ -197,6 +251,10 @@
       </div>
 
       <div id="statusBox" class="status-box" role="status" aria-live="polite"></div>
+      <div id="sessionActions" class="session-actions" aria-label="Session acties">
+        <button id="continueBtn" type="button" class="btn-ghost">Ga door naar doel</button>
+        <button id="switchBtn" type="button" class="btn-ghost danger">Logout / wissel account</button>
+      </div>
 
       <div id="login" class="panel active">
         <form id="loginForm" onsubmit="handleLogin(event)">
@@ -242,6 +300,10 @@
     const statusBox = document.getElementById('statusBox');
     const backLink = document.getElementById('backLink');
     const loginBtn = document.getElementById('loginBtn');
+    const targetChip = document.getElementById('targetChip');
+    const sessionActions = document.getElementById('sessionActions');
+    const continueBtn = document.getElementById('continueBtn');
+    const switchBtn = document.getElementById('switchBtn');
     const params = new URLSearchParams(window.location.search);
 
     function safeReturnTo() {
@@ -259,6 +321,12 @@
 
     const returnTo = safeReturnTo();
     backLink.href = returnTo;
+    targetChip.textContent = `TARGET · ${new URL(returnTo).hostname}`;
+    targetChip.title = returnTo;
+
+    function showSessionActions(show) {
+      sessionActions.classList.toggle('show', Boolean(show));
+    }
 
     function setStatus(kind, text) {
       statusBox.className = `status-box show ${kind}`;
@@ -271,16 +339,43 @@
     }
 
     async function checkExistingSession() {
+      if (params.get('switch') === '1') {
+        showSessionActions(false);
+        return;
+      }
       try {
         const res = await fetch(`${API_BASE}/api/me`, { credentials: 'include' });
         if (!res.ok) return;
         const me = await res.json().catch(() => null);
-        setStatus('success', `Sessie actief${me?.user ? ` als ${me.user}` : ''}. Doorsturen...`);
-        setTimeout(() => { window.location.href = returnTo; }, 350);
+        showSessionActions(true);
+        setStatus('success', `Sessie actief${me?.user ? ` als ${me.user}` : ''}. Je kunt doorgaan of wisselen van account.`);
       } catch (_) {
         // ignore
       }
     }
+
+    continueBtn.addEventListener('click', () => {
+      window.location.href = returnTo;
+    });
+
+    switchBtn.addEventListener('click', async () => {
+      switchBtn.disabled = true;
+      continueBtn.disabled = true;
+      setStatus('info', 'Sessie afmelden...');
+      try {
+        await fetch(`${API_BASE}/api/logout`, { method: 'POST', credentials: 'include' });
+        showSessionActions(false);
+        setStatus('success', 'Afgemeld. Log nu in met een ander account.');
+        const url = new URL(window.location.href);
+        url.searchParams.set('switch', '1');
+        window.history.replaceState({}, '', url.toString());
+      } catch {
+        setStatus('error', 'Afmelden mislukt. Probeer opnieuw.');
+      } finally {
+        switchBtn.disabled = false;
+        continueBtn.disabled = false;
+      }
+    });
 
     document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -304,6 +399,7 @@
       }
 
       loginBtn.disabled = true;
+      showSessionActions(false);
       setStatus('info', `Authenticatie bezig... Je wordt doorgestuurd naar ${new URL(returnTo).hostname}`);
 
       try {
