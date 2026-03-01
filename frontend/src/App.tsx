@@ -14,7 +14,7 @@ import {
   User,
 } from 'lucide-react';
 import { login, logout, me, register } from './lib/authApi';
-import { getReturnTarget, validateRegistration, type AuthMode } from './lib/authContract';
+import { getReturnTarget, redirectTo, validateRegistration, type AuthMode } from './lib/authContract';
 import { useDensity, type Density } from './hooks/useDensity';
 
 type StatusType = 'error' | 'success' | 'info' | null;
@@ -26,6 +26,32 @@ type FormState = {
   name: string;
   email: string;
 };
+
+const AUTO_REDIRECT_GUARD_KEY = 'auth:auto-redirect-guard';
+const AUTO_REDIRECT_GUARD_WINDOW_MS = 15_000;
+
+function hasRecentAutoRedirect(target: string): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(AUTO_REDIRECT_GUARD_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { target?: string; at?: number };
+    if (parsed.target !== target || typeof parsed.at !== 'number') return false;
+    return Date.now() - parsed.at < AUTO_REDIRECT_GUARD_WINDOW_MS;
+  } catch {
+    return false;
+  }
+}
+
+function markAutoRedirect(target: string): void {
+  try {
+    window.sessionStorage.setItem(
+      AUTO_REDIRECT_GUARD_KEY,
+      JSON.stringify({ target, at: Date.now() }),
+    );
+  } catch {
+    // Ignore storage failures.
+  }
+}
 
 function UnderwaterScene({ density, reducedMotion }: { density: Density; reducedMotion: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -245,6 +271,31 @@ export default function App() {
     };
   }, [target.switchRequested]);
 
+  useEffect(() => {
+    if (!existingUser || target.switchRequested || isSwitching) {
+      return;
+    }
+
+    if (hasRecentAutoRedirect(target.returnTo)) {
+      setStatus({
+        type: 'error',
+        message:
+          'Doorsturen is gestopt om een login-loop te voorkomen. Kies "Wissel account" en log opnieuw in.',
+      });
+      return;
+    }
+
+    setStatus({ type: 'info', message: 'Sessie actief. Je wordt doorgestuurd...' });
+    const redirectTimer = window.setTimeout(() => {
+      markAutoRedirect(target.returnTo);
+      redirectTo(target.returnTo, 'replace');
+    }, 900);
+
+    return () => {
+      window.clearTimeout(redirectTimer);
+    };
+  }, [existingUser, isSwitching, target.returnTo, target.switchRequested]);
+
   const onFieldChange = (field: keyof FormState) => (value: string) => {
     setForm((previous) => ({ ...previous, [field]: value }));
     if (status.type === 'error') {
@@ -310,7 +361,7 @@ export default function App() {
 
         setStatus({ type: 'success', message: 'Succesvol ingelogd. Je wordt doorgestuurd...' });
         window.setTimeout(() => {
-          window.location.href = target.returnTo;
+          redirectTo(target.returnTo, 'assign');
         }, 800);
 
         return;
@@ -390,7 +441,7 @@ export default function App() {
                 Sessie actief als <strong>{existingUser}</strong>.
               </p>
               <div className="session-actions">
-                <button type="button" className="ghost" onClick={() => (window.location.href = target.returnTo)}>
+                <button type="button" className="ghost" onClick={() => redirectTo(target.returnTo, 'assign')}>
                   Doorgaan
                 </button>
                 <button type="button" onClick={onSwitchAccount} disabled={isSwitching}>

@@ -85,6 +85,24 @@ describe('worker api proxy', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(response.status).toBe(307);
     expect(response.headers.get('location')).toContain('https://auth.chefgroep.nl');
-    expect(response.headers.get('location')).toContain('return_to=https%3A%2F%2Fauth.chefgroep.nl%2Fapi%2Fagents');
+    expect(response.headers.get('location')).toContain('return_to=https%3A%2F%2Fauth.chefgroep.nl%2F');
+  });
+
+  it('uses same-host referer as return_to when available', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const request = new Request('https://auth.chefgroep.nl/api/agents', {
+      headers: { Referer: 'https://auth.chefgroep.nl/?return_to=https%3A%2F%2Fadmin.chefgroep.nl%2Fmail' },
+    });
+
+    const response = await onRequest({
+      env: { API_ORIGIN: 'https://api.chefgroep.nl' },
+      request,
+    } as Parameters<typeof onRequest>[0]);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toContain(
+      'return_to=https%3A%2F%2Fauth.chefgroep.nl%2F%3Freturn_to%3Dhttps%253A%252F%252Fadmin.chefgroep.nl%252Fmail',
+    );
   });
 });

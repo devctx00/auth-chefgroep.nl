@@ -112,3 +112,12 @@ export function validateRegistration(form: RegistrationPayload): string | null {
 
   return null;
 }
+
+export function redirectTo(target: string, strategy: 'assign' | 'replace' = 'assign'): void {
+  if (strategy === 'replace') {
+    window.location.replace(target);
+    return;
+  }
+
+  window.location.assign(target);
+}

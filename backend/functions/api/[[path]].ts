@@ -92,12 +92,15 @@ function hasAuthContext(request: Request): boolean {
   return Boolean(request.headers.get('cookie') || request.headers.get('authorization'));
 }
 
-function isAbsoluteHttpsUrl(value: string): boolean {
+function getRefererReturnTo(request: Request, expectedHost: string): string | null {
+  const referer = request.headers.get('referer');
+  if (!referer) return null;
   try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'https:' && parsed.host.length > 0;
+    const parsed = new URL(referer);
+    if (parsed.host !== expectedHost) return null;
+    return parsed.toString();
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -105,10 +108,9 @@ function buildAuthRedirect(request: Request, env: Env): string {
   const incoming = new URL(request.url);
   const authOrigin = env.AUTH_ORIGIN || 'https://auth.chefgroep.nl';
   const authUrl = new URL(authOrigin);
-  const configuredReturnTo = env.AUTH_RETURN_TO?.trim() || '';
-  const returnTo = isAbsoluteHttpsUrl(configuredReturnTo)
-    ? configuredReturnTo
-    : `https://${incoming.host}${incoming.pathname}${incoming.search}`;
+  const configuredReturnTo = env.AUTH_RETURN_TO?.trim();
+  const inferredReturnTo = getRefererReturnTo(request, incoming.host) || `${incoming.origin}/`;
+  const returnTo = configuredReturnTo || inferredReturnTo;
   authUrl.searchParams.set('return_to', returnTo);
   return authUrl.toString();
 }

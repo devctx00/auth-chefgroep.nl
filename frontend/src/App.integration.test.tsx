@@ -2,10 +2,14 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import * as authContract from './lib/authContract';
 
 describe('App integration', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
+    window.history.replaceState({}, '', '/');
+
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = String(input);
 
@@ -56,6 +60,45 @@ describe('App integration', () => {
     await waitFor(() => {
       expect(screen.getByText(/Succesvol ingelogd/)).toBeInTheDocument();
     });
+  });
 
+  it('auto-redirects an already authenticated session to return_to', async () => {
+    window.history.replaceState({}, '', '/?return_to=https%3A%2F%2Fadmin.chefgroep.nl%2Fmail');
+    const redirectSpy = vi.spyOn(authContract, 'redirectTo').mockImplementation(() => {});
+
+    render(<App />);
+    await waitFor(
+      () => {
+        expect(redirectSpy).toHaveBeenCalledWith('https://admin.chefgroep.nl/mail', 'replace');
+      },
+      { timeout: 2500 },
+    );
+  });
+
+  it('does not auto-redirect when switch account is requested', async () => {
+    vi.useFakeTimers();
+    window.history.replaceState({}, '', '/?switch=1&return_to=https%3A%2F%2Fadmin.chefgroep.nl%2Fmail');
+    const redirectSpy = vi.spyOn(authContract, 'redirectTo').mockImplementation(() => {});
+
+    render(<App />);
+    await vi.advanceTimersByTimeAsync(1200);
+
+    expect(redirectSpy).not.toHaveBeenCalled();
+  });
+
+  it('stops auto-redirect when recent redirect guard is present', async () => {
+    window.history.replaceState({}, '', '/?return_to=https%3A%2F%2Fadmin.chefgroep.nl%2Fmail');
+    window.sessionStorage.setItem(
+      'auth:auto-redirect-guard',
+      JSON.stringify({ target: 'https://admin.chefgroep.nl/mail', at: Date.now() }),
+    );
+    const redirectSpy = vi.spyOn(authContract, 'redirectTo').mockImplementation(() => {});
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/login-loop te voorkomen/i)).toBeInTheDocument();
+    });
+    expect(redirectSpy).not.toHaveBeenCalled();
   });
 });
