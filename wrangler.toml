@@ -1,3 +1,6 @@
 name = "auth-chefgroep"
 compatibility_date = "2024-01-01"
-pages_build_output_dir = "dist"
+pages_build_output_dir = "frontend/dist"
+
+[vars]
+API_ORIGIN = "https://api.chefgroep.nl"

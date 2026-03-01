@@ -1,73 +1,29 @@
-# React + TypeScript + Vite
+# auth.chefgroep.nl
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend/backend split for auth portal on Cloudflare Pages with a same-origin API proxy.
 
-Currently, two official plugins are available:
+## Architecture
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Frontend (React + Vite): `frontend/`
+- Backend proxy (Cloudflare Pages Functions): `backend/functions/api/[[path]].ts`
+- Upstream API target: `API_ORIGIN` in `wrangler.toml` (default `https://api.chefgroep.nl`)
+- Frontend auth calls always use same-origin `/api/*`.
 
-## React Compiler
+Frontend never calls the upstream API directly. All auth requests go via `/api`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Scripts
 
-## Expanding the ESLint configuration
+- `npm run dev` - local frontend dev server
+- `npm run test` - unit + integration tests (frontend + backend)
+- `npm run test:e2e` - Playwright e2e
+- `npm run build` - typecheck + frontend production build
+- `npm run verify` - lint + test + build
+- `npm run deploy` - verify + e2e + Cloudflare Pages deploy (`auth-chefgroep`)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Deploy
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run deploy
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Cloudflare Pages project target remains `auth-chefgroep` and deploy includes `backend/functions`.
