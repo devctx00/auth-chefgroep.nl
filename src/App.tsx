@@ -185,7 +185,7 @@ export default function App() {
   // Initialize Return URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const raw = params.get('return_to') || params.get('redirect') || '';
+    const raw = params.get('return_to') || '';
     
     if (raw) {
       try {
