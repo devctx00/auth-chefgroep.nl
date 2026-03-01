@@ -27,3 +27,4 @@ npm run deploy
 ```
 
 Cloudflare Pages project target remains `auth-chefgroep` and deploy includes `backend/functions`.
+The deploy command runs Wrangler with `--cwd backend` so `functions/` is bundled from the backend folder.
