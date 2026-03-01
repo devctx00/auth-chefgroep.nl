@@ -8,6 +8,18 @@ describe('authContract', () => {
     expect(result.returnHost).toBe('flow.chefgroep.nl');
   });
 
+  it('normalizes bare host shorthand to an absolute https URL', () => {
+    const result = resolveReturnTo('mc.chefgroep.nl/mission-control', 'https://auth.chefgroep.nl');
+    expect(result.returnTo).toBe('https://mc.chefgroep.nl/mission-control');
+    expect(result.returnHost).toBe('mc.chefgroep.nl');
+  });
+
+  it('rejects relative paths that would keep users on auth host', () => {
+    const result = resolveReturnTo('/mission-control', 'https://auth.chefgroep.nl');
+    expect(result.returnTo).toBe('https://mc.chefgroep.nl/mission-control');
+    expect(result.returnHost).toBe('mc.chefgroep.nl');
+  });
+
   it('rejects non-https and foreign domains', () => {
     const result = resolveReturnTo('http://evil.example.com', 'https://auth.chefgroep.nl');
     expect(result.returnTo).toBe('https://mc.chefgroep.nl/mission-control');

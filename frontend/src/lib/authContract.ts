@@ -20,9 +20,33 @@ function isDevHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
 }
 
+function parseTrustedCandidate(rawValue: string): URL | null {
+  const value = rawValue.trim();
+  if (!value) {
+    return null;
+  }
+
+  try {
+    // Prefer explicit absolute URLs first.
+    return new URL(value);
+  } catch {
+    // Support host shorthand like "mc.chefgroep.nl" or "mc.chefgroep.nl/path".
+    const hostShorthandPattern = /^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:[/?#].*)?$/i;
+    if (!hostShorthandPattern.test(value)) {
+      return null;
+    }
+
+    try {
+      return new URL(`https://${value}`);
+    } catch {
+      return null;
+    }
+  }
+}
+
 export function resolveReturnTo(
   rawValue: string | null,
-  origin: string,
+  _origin: string,
   options: ReturnTargetOptions = {},
 ): {
   returnTo: string;
@@ -35,18 +59,16 @@ export function resolveReturnTo(
     return { returnTo: fallback.toString(), returnHost: fallback.hostname };
   }
 
-  try {
-    const parsed = new URL(rawValue, origin);
-    const hostAllowed =
-      parsed.hostname === 'chefgroep.nl' || parsed.hostname.endsWith(AUTH_HOST_SUFFIX);
-    const devHostAllowed =
-      allowDevHosts && parsed.protocol === 'http:' && isDevHost(parsed.hostname);
+  const parsed = parseTrustedCandidate(rawValue);
+  if (!parsed) {
+    return { returnTo: fallback.toString(), returnHost: fallback.hostname };
+  }
 
-    if ((parsed.protocol === 'https:' && hostAllowed) || devHostAllowed) {
-      return { returnTo: parsed.toString(), returnHost: parsed.hostname };
-    }
-  } catch {
-    // Ignore invalid user-provided URLs and fallback to trusted default.
+  const hostAllowed = parsed.hostname === 'chefgroep.nl' || parsed.hostname.endsWith(AUTH_HOST_SUFFIX);
+  const devHostAllowed = allowDevHosts && parsed.protocol === 'http:' && isDevHost(parsed.hostname);
+
+  if ((parsed.protocol === 'https:' && hostAllowed) || devHostAllowed) {
+    return { returnTo: parsed.toString(), returnHost: parsed.hostname };
   }
 
   return { returnTo: fallback.toString(), returnHost: fallback.hostname };
