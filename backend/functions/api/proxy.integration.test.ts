@@ -85,7 +85,9 @@ describe('worker api proxy', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(response.status).toBe(307);
     expect(response.headers.get('location')).toContain('https://auth.chefgroep.nl');
-    expect(response.headers.get('location')).toContain('return_to=https%3A%2F%2Fauth.chefgroep.nl%2F');
+    expect(response.headers.get('location')).toContain(
+      `return_to=${encodeURIComponent('https://mc.chefgroep.nl/mission-control')}`,
+    );
   });
 
   it('uses same-host referer as return_to when available', async () => {
@@ -102,7 +104,26 @@ describe('worker api proxy', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(response.status).toBe(307);
     expect(response.headers.get('location')).toContain(
-      'return_to=https%3A%2F%2Fauth.chefgroep.nl%2F%3Freturn_to%3Dhttps%253A%252F%252Fadmin.chefgroep.nl%252Fmail',
+      `return_to=${encodeURIComponent('https://admin.chefgroep.nl/mail')}`,
+    );
+  });
+
+  it('rejects configured AUTH_RETURN_TO on auth host and falls back safely', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const request = new Request('https://auth.chefgroep.nl/api/agents');
+
+    const response = await onRequest({
+      env: {
+        API_ORIGIN: 'https://api.chefgroep.nl',
+        AUTH_RETURN_TO: 'https://auth.chefgroep.nl/?return_to=https%3A%2F%2Fevil.example',
+      },
+      request,
+    } as Parameters<typeof onRequest>[0]);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toContain(
+      `return_to=${encodeURIComponent('https://mc.chefgroep.nl/mission-control')}`,
     );
   });
 });

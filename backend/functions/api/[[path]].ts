@@ -4,6 +4,8 @@ interface Env {
   AUTH_RETURN_TO?: string;
   PUBLIC_API_PREFIXES?: string;
 }
+const DEFAULT_RETURN_TO = 'https://mc.chefgroep.nl/mission-control';
+const AUTH_HOST = 'auth.chefgroep.nl';
 
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
@@ -92,13 +94,41 @@ function hasAuthContext(request: Request): boolean {
   return Boolean(request.headers.get('cookie') || request.headers.get('authorization'));
 }
 
+function isTrustedReturnTo(candidate: URL): boolean {
+  const host = candidate.hostname;
+  const trustedHost = host === 'chefgroep.nl' || host.endsWith('.chefgroep.nl');
+  return candidate.protocol === 'https:' && trustedHost && host !== AUTH_HOST;
+}
+
+function parseReturnCandidate(rawValue: string | null): URL | null {
+  if (!rawValue) return null;
+  try {
+    return new URL(rawValue);
+  } catch {
+    return null;
+  }
+}
+
+function unwrapAuthNestedReturnTo(candidate: URL, depth = 0): URL {
+  if (candidate.hostname !== AUTH_HOST || depth > 2) return candidate;
+  const nested = candidate.searchParams.get('return_to') || candidate.searchParams.get('redirect');
+  const nestedUrl = parseReturnCandidate(nested);
+  if (!nestedUrl) return candidate;
+  return unwrapAuthNestedReturnTo(nestedUrl, depth + 1);
+}
+
 function getRefererReturnTo(request: Request, expectedHost: string): string | null {
   const referer = request.headers.get('referer');
   if (!referer) return null;
   try {
     const parsed = new URL(referer);
     if (parsed.host !== expectedHost) return null;
-    return parsed.toString();
+
+    const nested = parseReturnCandidate(parsed.searchParams.get('return_to') || parsed.searchParams.get('redirect'));
+    if (!nested) return null;
+    const unwrapped = unwrapAuthNestedReturnTo(nested);
+    if (!isTrustedReturnTo(unwrapped)) return null;
+    return unwrapped.toString();
   } catch {
     return null;
   }
@@ -106,11 +136,15 @@ function getRefererReturnTo(request: Request, expectedHost: string): string | nu
 
 function buildAuthRedirect(request: Request, env: Env): string {
   const incoming = new URL(request.url);
-  const authOrigin = env.AUTH_ORIGIN || 'https://auth.chefgroep.nl';
-  const authUrl = new URL(authOrigin);
-  const configuredReturnTo = env.AUTH_RETURN_TO?.trim();
-  const inferredReturnTo = getRefererReturnTo(request, incoming.host) || `${incoming.origin}/`;
-  const returnTo = configuredReturnTo || inferredReturnTo;
+  const authUrl = new URL(env.AUTH_ORIGIN || 'https://auth.chefgroep.nl');
+  const configuredCandidate = parseReturnCandidate(env.AUTH_RETURN_TO?.trim() || null);
+  const configuredReturnTo = configuredCandidate
+    ? unwrapAuthNestedReturnTo(configuredCandidate)
+    : null;
+  const inferredReturnTo = getRefererReturnTo(request, incoming.host);
+  const returnTo = configuredReturnTo && isTrustedReturnTo(configuredReturnTo)
+    ? configuredReturnTo.toString()
+    : inferredReturnTo || DEFAULT_RETURN_TO;
   authUrl.searchParams.set('return_to', returnTo);
   return authUrl.toString();
 }

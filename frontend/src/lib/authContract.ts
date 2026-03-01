@@ -1,4 +1,5 @@
 export const AUTH_HOST_SUFFIX = '.chefgroep.nl';
+export const AUTH_HOST = 'auth.chefgroep.nl';
 export const DEFAULT_RETURN_TO = 'https://mc.chefgroep.nl/mission-control';
 export const USERNAME_REGEX = /^[a-zA-Z0-9_-]{3,20}$/;
 
@@ -44,6 +45,24 @@ function parseTrustedCandidate(rawValue: string): URL | null {
   }
 }
 
+function unwrapAuthNestedReturnTo(candidate: URL, depth = 0): URL {
+  if (candidate.hostname !== AUTH_HOST || depth > 2) {
+    return candidate;
+  }
+
+  const nested = candidate.searchParams.get('return_to') || candidate.searchParams.get('redirect');
+  if (!nested) {
+    return candidate;
+  }
+
+  const parsedNested = parseTrustedCandidate(nested);
+  if (!parsedNested) {
+    return candidate;
+  }
+
+  return unwrapAuthNestedReturnTo(parsedNested, depth + 1);
+}
+
 export function resolveReturnTo(
   rawValue: string | null,
   _origin: string,
@@ -64,11 +83,15 @@ export function resolveReturnTo(
     return { returnTo: fallback.toString(), returnHost: fallback.hostname };
   }
 
-  const hostAllowed = parsed.hostname === 'chefgroep.nl' || parsed.hostname.endsWith(AUTH_HOST_SUFFIX);
-  const devHostAllowed = allowDevHosts && parsed.protocol === 'http:' && isDevHost(parsed.hostname);
+  const unwrapped = unwrapAuthNestedReturnTo(parsed);
+  const hostAllowed = unwrapped.hostname === 'chefgroep.nl' || unwrapped.hostname.endsWith(AUTH_HOST_SUFFIX);
+  const devHostAllowed = allowDevHosts && unwrapped.protocol === 'http:' && isDevHost(unwrapped.hostname);
 
-  if ((parsed.protocol === 'https:' && hostAllowed) || devHostAllowed) {
-    return { returnTo: parsed.toString(), returnHost: parsed.hostname };
+  if (
+    (unwrapped.protocol === 'https:' && hostAllowed && unwrapped.hostname !== AUTH_HOST)
+    || devHostAllowed
+  ) {
+    return { returnTo: unwrapped.toString(), returnHost: unwrapped.hostname };
   }
 
   return { returnTo: fallback.toString(), returnHost: fallback.hostname };

@@ -20,6 +20,12 @@ describe('authContract', () => {
     expect(result.returnHost).toBe('mc.chefgroep.nl');
   });
 
+  it('rejects auth.chefgroep.nl as direct return target', () => {
+    const result = resolveReturnTo('https://auth.chefgroep.nl/?return_to=https%3A%2F%2Fadmin.chefgroep.nl%2F', 'https://auth.chefgroep.nl');
+    expect(result.returnTo).toBe('https://admin.chefgroep.nl/');
+    expect(result.returnHost).toBe('admin.chefgroep.nl');
+  });
+
   it('rejects non-https and foreign domains', () => {
     const result = resolveReturnTo('http://evil.example.com', 'https://auth.chefgroep.nl');
     expect(result.returnTo).toBe('https://mc.chefgroep.nl/mission-control');
