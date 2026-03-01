@@ -4,3 +4,5 @@ pages_build_output_dir = "frontend/dist"
 
 [vars]
 API_ORIGIN = "https://api.chefgroep.nl"
+AUTH_ORIGIN = "https://auth.chefgroep.nl"
+PUBLIC_API_PREFIXES = "/api/public/*,/api/auth,/api/register,/api/me,/api/logout"
