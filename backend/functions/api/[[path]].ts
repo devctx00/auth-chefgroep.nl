@@ -18,6 +18,8 @@ const HOP_BY_HOP_HEADERS = new Set([
 const SENSITIVE_REQUEST_HEADERS = new Set(['cookie', 'authorization']);
 const SENSITIVE_RESPONSE_HEADERS = new Set(['set-cookie']);
 const DEFAULT_PUBLIC_API_PREFIXES = ['/api/public/*', '/api/auth', '/api/register', '/api/me', '/api/logout'];
+const AUTH_REQUEST_PASSTHROUGH_PATHS = ['/api/auth', '/api/me', '/api/logout', '/api/register'];
+const AUTH_SESSION_RESPONSE_PATHS = ['/api/auth', '/api/logout', '/api/register'];
 
 function buildUpstreamUrl(request: Request, apiOrigin: string): URL {
   const incoming = new URL(request.url);
@@ -74,15 +76,39 @@ function isPublicApiPath(pathname: string, matchers: string[]): boolean {
   return matchers.some((matcher) => matchesPublicPath(pathname, matcher));
 }
 
+function matchesPathOrChild(pathname: string, basePath: string): boolean {
+  return pathname === basePath || pathname.startsWith(`${basePath}/`);
+}
+
+function isAuthRequestPath(pathname: string): boolean {
+  return AUTH_REQUEST_PASSTHROUGH_PATHS.some((path) => matchesPathOrChild(pathname, path));
+}
+
+function isSessionResponsePath(pathname: string): boolean {
+  return AUTH_SESSION_RESPONSE_PATHS.some((path) => matchesPathOrChild(pathname, path));
+}
+
 function hasAuthContext(request: Request): boolean {
   return Boolean(request.headers.get('cookie') || request.headers.get('authorization'));
+}
+
+function isAbsoluteHttpsUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' && parsed.host.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 function buildAuthRedirect(request: Request, env: Env): string {
   const incoming = new URL(request.url);
   const authOrigin = env.AUTH_ORIGIN || 'https://auth.chefgroep.nl';
   const authUrl = new URL(authOrigin);
-  const returnTo = env.AUTH_RETURN_TO || incoming.host;
+  const configuredReturnTo = env.AUTH_RETURN_TO?.trim() || '';
+  const returnTo = isAbsoluteHttpsUrl(configuredReturnTo)
+    ? configuredReturnTo
+    : `https://${incoming.host}${incoming.pathname}${incoming.search}`;
   authUrl.searchParams.set('return_to', returnTo);
   return authUrl.toString();
 }
@@ -90,6 +116,8 @@ function buildAuthRedirect(request: Request, env: Env): string {
 export const onRequest: PagesFunction<Env> = async ({ env, request }) => {
   const incomingUrl = new URL(request.url);
   const isPublicRoute = isPublicApiPath(incomingUrl.pathname, getPublicMatchers(env));
+  const preserveAuthRequestHeaders = isAuthRequestPath(incomingUrl.pathname);
+  const preserveSessionResponseHeaders = isSessionResponsePath(incomingUrl.pathname);
 
   if (!isPublicRoute && !hasAuthContext(request)) {
     return new Response(null, {
@@ -103,7 +131,7 @@ export const onRequest: PagesFunction<Env> = async ({ env, request }) => {
 
   const apiOrigin = env.API_ORIGIN || 'https://api.chefgroep.nl';
   const upstreamUrl = buildUpstreamUrl(request, apiOrigin);
-  const requestHeaders = copyRequestHeaders(request.headers, incomingUrl.host, isPublicRoute);
+  const requestHeaders = copyRequestHeaders(request.headers, incomingUrl.host, isPublicRoute && !preserveAuthRequestHeaders);
 
   const upstreamResponse = await fetch(upstreamUrl, {
     method: request.method,
@@ -112,7 +140,7 @@ export const onRequest: PagesFunction<Env> = async ({ env, request }) => {
     redirect: 'manual',
   });
 
-  const responseHeaders = copyResponseHeaders(upstreamResponse.headers, isPublicRoute);
+  const responseHeaders = copyResponseHeaders(upstreamResponse.headers, isPublicRoute && !preserveSessionResponseHeaders);
   if (!responseHeaders.has('cache-control')) {
     responseHeaders.set('cache-control', 'no-store');
   }
