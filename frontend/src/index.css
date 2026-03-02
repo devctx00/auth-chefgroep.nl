@@ -4,16 +4,17 @@
 @import './chefgroep-standard.css';
 
 :root {
-  --bg-deep: #020916;
-  --panel: rgba(6, 27, 47, 0.76);
-  --panel-border: rgba(125, 211, 252, 0.2);
-  --text-main: #e2eefb;
-  --text-soft: #97b6d5;
-  --accent: #2dd4bf;
-  --accent-strong: #0ea5e9;
+  --bg-deep: var(--color-void);
+  --panel: rgba(13, 20, 32, 0.76);
+  --panel-border: var(--color-edge);
+  --text-main: var(--color-pearl);
+  --text-soft: var(--color-slate-light);
+  --accent: var(--color-signal);
+  --accent-strong: var(--color-signal-bright);
   --danger: #fca5a5;
   --ok: #86efac;
   --radius: 20px;
+  --space-unit: var(--space-4);
   --gap-scale: 1;
 }
 
@@ -39,7 +40,7 @@ body {
   margin: 0;
   background: var(--bg-deep);
   color: var(--text-main);
-  font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-family: var(--font-body);
 }
 
 h1,
@@ -47,12 +48,12 @@ h2,
 h3,
 button,
 label {
-  font-family: 'Sora', 'IBM Plex Sans', sans-serif;
+  font-family: var(--font-display);
 }
 
 .auth-shell {
   min-height: 100vh;
-  padding: calc(1rem * var(--gap-scale));
+  padding: calc(var(--space-unit) * var(--gap-scale));
   position: relative;
   overflow: hidden;
 }
