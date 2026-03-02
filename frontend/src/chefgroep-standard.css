@@ -1,0 +1,97 @@
+:root {
+  --cg-void: #060a10;
+  --cg-abyss: #0a0f18;
+  --cg-deep: #0d1420;
+  --cg-hull: #111827;
+  --cg-steel: #1e293b;
+  --cg-slate-dim: #334155;
+  --cg-slate-mid: #64748b;
+  --cg-slate-light: #94a3b8;
+  --cg-pearl: #e2e8f0;
+  --cg-bone: #f1f5f9;
+  --cg-signal: #2dd4bf;
+  --cg-signal-bright: #5eead4;
+  --cg-emerald: #10b981;
+  --cg-amber: #fbbf24;
+  --cg-red: #f87171;
+  --cg-violet: #a78bfa;
+  --cg-edge: rgba(148, 163, 184, 0.08);
+  --cg-edge-hover: rgba(148, 163, 184, 0.16);
+  --cg-glass: rgba(13, 20, 32, 0.72);
+
+  --bg: var(--cg-void);
+  --bg-secondary: var(--cg-abyss);
+  --bg-card: var(--cg-deep);
+  --bg-hover: rgba(30, 41, 59, 0.45);
+  --bg-elevated: var(--cg-hull);
+  --text: var(--cg-pearl);
+  --dim: var(--cg-slate-light);
+  --muted: var(--cg-slate-mid);
+  --cyan: var(--cg-signal);
+  --emerald: var(--cg-emerald);
+  --amber: var(--cg-amber);
+  --rose: var(--cg-red);
+  --violet: var(--cg-violet);
+  --border: var(--cg-edge);
+  --border-active: rgba(45, 212, 191, 0.25);
+  --font-ui: 'Outfit', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --glow-cyan: 0 0 28px rgba(45, 212, 191, 0.14);
+}
+
+html, body {
+  background: var(--cg-void);
+  color: var(--cg-pearl);
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::before {
+  background:
+    radial-gradient(ellipse at 12% 16%, rgba(45, 212, 191, 0.08) 0%, transparent 48%),
+    radial-gradient(ellipse at 88% 74%, rgba(167, 139, 250, 0.08) 0%, transparent 52%);
+  animation: cg-aurora 24s ease-in-out infinite;
+}
+
+body::after {
+  background-image:
+    linear-gradient(rgba(148,163,184,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,0.02) 1px, transparent 1px);
+  background-size: 72px 72px;
+  opacity: 0.35;
+}
+
+#root, main, .app {
+  position: relative;
+  z-index: 1;
+}
+
+.card, .panel, .glass-command {
+  background: var(--cg-glass);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid var(--cg-edge);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.02), 0 8px 40px rgba(0,0,0,0.45);
+}
+
+.card:hover, .panel:hover {
+  border-color: var(--cg-edge-hover);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 12px 44px rgba(0,0,0,0.5), 0 0 0 1px rgba(45,212,191,0.08);
+}
+
+@keyframes cg-aurora {
+  0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.25; }
+  50% { transform: translate(24px, -14px) rotate(180deg) scale(1.06); opacity: 0.45; }
+  100% { transform: translate(0, 0) rotate(360deg) scale(1); opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
