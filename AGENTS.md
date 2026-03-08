@@ -1,74 +1,77 @@
-# auth.chefgroep.nl — Agent Guidelines
+# auth.chefgroep.nl — AGENTS.md
 
-## Site Overview
+Dit document beschrijft hoe we `auth.chefgroep.nl` bouwen, testen en deployen.
 
-Auth portal for ChefGroep control-plane apps (`mc`, `admin`, `flow`, `webmail`).
-Frontend and backend proxy are split in one repo and deployed together on Cloudflare Pages.
+## Overzicht
 
-| Property | Value |
-|---|---|
-| Stack | React 19 + TypeScript + Vite + Framer Motion |
-| Deploy | Cloudflare Pages (`auth-chefgroep`) |
-| Backend | Cloudflare Pages Functions proxy (`backend/functions/api/[[path]].ts`) |
-| API upstream | `https://api.chefgroep.nl` via `API_ORIGIN` |
-| Auth cookie | `mc_session` (same-origin `/api/*` calls with `credentials: 'include'`) |
+Auth portal voor ChefGroep control-plane apps (o.a. `mc`, `admin`, `flow`, `webmail`).
+
+- **Frontend:** React + TypeScript + Vite
+- **Hosting:** Cloudflare Pages
+- **Same-origin proxy:** Cloudflare Pages Functions
+  - `/api/*` (default)
+  - `/apiu/*` (alias)
+- **Upstream:** `API_ORIGIN` (default `https://api.chefgroep.nl`)
+- **Auth cookie:** `mc_session` (browser calls met `credentials: 'include'`)
 
 ---
 
-## Project Structure
+## Structuur
 
 ```text
-frontend/
-├── src/
-│   ├── main.tsx                  # React entry
-│   ├── App.tsx                   # Auth UI + active-session handling + return_to redirect
-│   ├── index.css                 # Full UI styling
-│   ├── hooks/useDensity.ts       # Adaptive density helper
-│   └── lib/
-│       ├── authApi.ts            # Same-origin auth calls (/api/auth|register|me|logout)
-│       ├── authContract.ts       # return_to validation + redirect helper + form validation
-│       └── authContract.test.ts  # Contract tests
-backend/
-└── functions/
-    └── api/[[path]].ts           # Proxy to API_ORIGIN with auth/public path rules
+auth-chefgroep.nl-main/
+  frontend/
+    src/
+      App.tsx
+      main.tsx
+      lib/
+        authApi.ts
+        authContract.ts
+      hooks/
+    public/
+      _headers
+      _redirects
+  backend/
+    functions/
+      _shared/apiProxy.ts
+      api/[[path]].ts
+      apiu/[[path]].ts
+    vitest.config.ts
+  wrangler.toml
+  package.json
+  AGENTS.md
 ```
 
 ---
 
-## Routing and Redirect Rules
+## Return-to contract (open-redirect voorkomen)
 
-- App route: `/`
-- Query support:
-  - `return_to=<https URL>`: target app redirect after auth/session check
-  - `switch=1`: force account-switch flow, disable auto redirect
-- Active session behavior:
-  - `me()` success shows current user and auto-redirects to `return_to` (or default target)
-  - `Wissel account` logs out and keeps user on auth app
+De app accepteert:
+- `return_to=<url>`: waarheen na succesvolle login
+- `switch=1`: force account switch (geen auto-redirect)
 
-`return_to` is strictly validated in `authContract.ts`:
-- allow only `https://*.chefgroep.nl` (and `https://chefgroep.nl`)
-- optional dev exception for localhost only with `VITE_ALLOW_DEV_RETURN_TO=true`
-- fallback target: `https://mc.chefgroep.nl/mission-control`
+**Regels (zie `frontend/src/lib/authContract.ts`):**
+- Alleen `https://*.chefgroep.nl` (en `https://chefgroep.nl`) is toegestaan.
+- Optionele dev uitzondering voor localhost alleen met `VITE_ALLOW_DEV_RETURN_TO=true`.
+- Fallback target: `https://mc.chefgroep.nl/mission-control`.
+
+**Guardrail:** verzwak deze validatie nooit; dit is een security boundary.
 
 ---
 
-## API Endpoints (Same Origin)
+## API prefix (`/api` vs `/apiu`)
 
-All browser requests must go to same-origin `/api/*`:
+Frontend roept altijd same-origin aan via `authApi.ts`.
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/auth` | POST | Login |
-| `/api/register` | POST | Register user |
-| `/api/me` | GET | Session probe |
-| `/api/logout` | POST | Logout |
-| `/api/public/*` | GET | Public passthrough routes |
+- Default prefix: `/api`
+- Alternatief: `/apiu` door build env var:
+  - `VITE_API_PREFIX=/apiu`
 
-Private routes without auth context are redirected with `307` to auth origin with `return_to`.
+Backend heeft beide proxies beschikbaar (zelfde gedrag).
 
 ---
 
-## Commands
+## Commands (package.json)
 
 ```bash
 npm run dev
@@ -76,18 +79,77 @@ npm run lint
 npm run test:unit
 npm run test:integration
 npm run test:e2e
-npm run verify         # lint + unit/integration tests + build
-npm run verify:full    # verify + e2e
-npm run deploy:pages   # deploy frontend + functions bundle
-npm run deploy         # verify:full + deploy:pages
+npm run verify
+npm run verify:full
+npm run deploy
 ```
+
+**Wat is wat:**
+- `verify` = lint + unit/integration + build
+- `verify:full` = `verify` + Playwright e2e
+- `deploy` = `verify:full` + `wrangler pages deploy`
 
 ---
 
-## Guardrails
+## Proxy gedrag (Pages Functions)
 
-- Never bypass same-origin auth contract from frontend; do not call `api.chefgroep.nl` directly.
-- Keep `return_to` validation strict; no open-redirect regressions.
-- Preserve `credentials: 'include'` for auth/session endpoints.
-- Keep proxy header filtering behavior intact (strip sensitive headers on public routes, preserve session headers on auth routes).
-- Verify with both frontend and backend integration tests after auth/proxy changes.
+De proxy:
+- proxyt naar `API_ORIGIN` + upstream prefix (default `/api`)
+- heeft open route allowlist (`PUBLIC_API_PREFIXES`) voor routes die geen redirect mogen krijgen
+- kan routes “anonymous” forceren (`ANON_API_PREFIXES`) om cookies/authorization te strippen
+
+**Auth endpoints** zoals `/api/auth` mogen **Set-Cookie** behouden → zet die endpoints niet in `ANON_API_PREFIXES`.
+
+---
+
+## Deploy
+
+Cloudflare Pages project: `auth-chefgroep`
+
+```bash
+npm run deploy
+```
+
+Checklist:
+- [ ] `npm run verify:full` groen
+- [ ] return_to contract tests groen
+- [ ] proxy integration tests groen
+
+---
+
+## Troubleshooting
+
+**Ik krijg 307 redirects in de browser**
+- Endpoint staat niet in `PUBLIC_API_PREFIXES` of request mist auth context.
+
+**Login werkt maar redirect niet**
+- `return_to` wordt geweigerd door de allowlist (verwacht!) → check domein/https.
+
+**Cookies lijken te verdwijnen**
+- Controleer of endpoint per ongeluk in `ANON_API_PREFIXES` staat.
+
+<!-- gitnexus:start -->
+# GitNexus MCP
+
+This project is indexed by GitNexus as **auth.chefgroep.nl** (124 symbols, 265 relationships, 11 execution flows).
+
+## Always Start Here
+
+1. **Read `gitnexus://repo/{name}/context`** — codebase overview + check index freshness
+2. **Match your task to a skill below** and **read that skill file**
+3. **Follow the skill's workflow and checklist**
+
+> If step 1 warns the index is stale, run `npx gitnexus analyze` in the terminal first.
+
+## Skills
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+<!-- gitnexus:end -->

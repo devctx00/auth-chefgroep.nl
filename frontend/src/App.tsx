@@ -1,12 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ElementType, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
-  Crown,
-  Eye,
-  EyeOff,
   Loader2,
   Lock,
   Mail,
@@ -15,7 +12,10 @@ import {
 } from 'lucide-react';
 import { login, logout, me, register } from './lib/authApi';
 import { getReturnTarget, redirectTo, validateRegistration, type AuthMode } from './lib/authContract';
-import { useDensity, type Density } from './hooks/useDensity';
+import { clearAutoRedirectGuard, hasRecentAutoRedirect, markAutoRedirect } from './lib/redirectGuard';
+import { useDensity } from './hooks/useDensity';
+import UnderwaterScene from './components/UnderwaterScene';
+import InputField from './components/InputField';
 
 type StatusType = 'error' | 'success' | 'info' | null;
 
@@ -26,193 +26,6 @@ type FormState = {
   name: string;
   email: string;
 };
-
-const AUTO_REDIRECT_GUARD_KEY = 'auth:auto-redirect-guard';
-const AUTO_REDIRECT_GUARD_WINDOW_MS = 15_000;
-
-function hasRecentAutoRedirect(target: string): boolean {
-  try {
-    const raw = window.sessionStorage.getItem(AUTO_REDIRECT_GUARD_KEY);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw) as { target?: string; at?: number };
-    if (parsed.target !== target || typeof parsed.at !== 'number') return false;
-    return Date.now() - parsed.at < AUTO_REDIRECT_GUARD_WINDOW_MS;
-  } catch {
-    return false;
-  }
-}
-
-function markAutoRedirect(target: string): void {
-  try {
-    window.sessionStorage.setItem(
-      AUTO_REDIRECT_GUARD_KEY,
-      JSON.stringify({ target, at: Date.now() }),
-    );
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
-function UnderwaterScene({ density, reducedMotion }: { density: Density; reducedMotion: boolean }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      return;
-    }
-
-    const context = canvas.getContext('2d');
-
-    if (!context) {
-      return;
-    }
-
-    const particlesByDensity: Record<Density, number> = {
-      compact: 12,
-      comfortable: 20,
-      relaxed: 30,
-    };
-
-    type Bubble = { x: number; y: number; radius: number; speed: number; drift: number };
-
-    let width = 0;
-    let height = 0;
-    let frameId = 0;
-    let bubbles: Bubble[] = [];
-
-    const createBubble = (): Bubble => ({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      radius: 1 + Math.random() * 4,
-      speed: 0.2 + Math.random() * 0.6,
-      drift: (Math.random() - 0.5) * 0.4,
-    });
-
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      width = window.innerWidth;
-      height = window.innerHeight;
-      canvas.width = Math.floor(width * dpr);
-      canvas.height = Math.floor(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-      context.setTransform(dpr, 0, 0, dpr, 0, 0);
-      bubbles = Array.from({ length: particlesByDensity[density] }, createBubble);
-    };
-
-    const drawFrame = () => {
-      const gradient = context.createLinearGradient(0, 0, 0, height);
-      gradient.addColorStop(0, '#03132d');
-      gradient.addColorStop(0.55, '#041f3d');
-      gradient.addColorStop(1, '#020916');
-      context.fillStyle = gradient;
-      context.fillRect(0, 0, width, height);
-
-      context.globalAlpha = 0.14;
-      context.fillStyle = '#67e8f9';
-      context.beginPath();
-      context.ellipse(width * 0.2, height * 0.15, width * 0.32, 90, 0, 0, Math.PI * 2);
-      context.fill();
-
-      context.globalAlpha = 1;
-      for (const bubble of bubbles) {
-        context.beginPath();
-        context.fillStyle = 'rgba(186,230,253,0.42)';
-        context.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
-        context.fill();
-
-        if (!reducedMotion) {
-          bubble.y -= bubble.speed;
-          bubble.x += bubble.drift;
-
-          if (bubble.y + bubble.radius < 0 || bubble.x < -20 || bubble.x > width + 20) {
-            bubble.x = Math.random() * width;
-            bubble.y = height + 8;
-          }
-        }
-      }
-
-      if (!reducedMotion) {
-        frameId = window.requestAnimationFrame(drawFrame);
-      }
-    };
-
-    resize();
-    drawFrame();
-
-    const onResize = () => {
-      resize();
-      if (reducedMotion) {
-        drawFrame();
-      }
-    };
-
-    window.addEventListener('resize', onResize);
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      window.removeEventListener('resize', onResize);
-    };
-  }, [density, reducedMotion]);
-
-  return <canvas ref={canvasRef} className="underwater-canvas" aria-hidden="true" />;
-}
-
-function InputField({
-  id,
-  type,
-  label,
-  placeholder,
-  value,
-  onChange,
-  icon,
-  disabled,
-  autoComplete,
-}: {
-  id: string;
-  type: 'text' | 'email' | 'password';
-  label: string;
-  placeholder: string;
-  value: string;
-  onChange: (nextValue: string) => void;
-  icon: ElementType;
-  disabled: boolean;
-  autoComplete: string;
-}) {
-  const [showPassword, setShowPassword] = useState(false);
-  const Icon = icon;
-
-  return (
-    <div className="field">
-      <label htmlFor={id}>{label}</label>
-      <div className="field-input-wrap">
-        <Icon className="field-icon" aria-hidden="true" />
-        <input
-          id={id}
-          type={type === 'password' && showPassword ? 'text' : type}
-          value={value}
-          placeholder={placeholder}
-          autoComplete={autoComplete}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-          required
-        />
-        {type === 'password' && (
-          <button
-            type="button"
-            className="field-toggle"
-            onClick={() => setShowPassword((value) => !value)}
-            aria-label={showPassword ? 'Verberg invoer' : 'Toon invoer'}
-          >
-            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function App() {
   const prefersReducedMotion = useReducedMotion();
@@ -248,18 +61,13 @@ export default function App() {
   }, [density]);
 
   useEffect(() => {
-    if (target.switchRequested) {
-      return;
-    }
+    if (target.switchRequested) return;
 
     let active = true;
 
     void me()
       .then((result) => {
-        if (!active || !result.ok) {
-          return;
-        }
-
+        if (!active || !result.ok) return;
         setExistingUser(typeof result.data.user === 'string' ? result.data.user : 'Actieve sessie');
       })
       .catch(() => {
@@ -272,9 +80,7 @@ export default function App() {
   }, [target.switchRequested]);
 
   useEffect(() => {
-    if (!existingUser || target.switchRequested || isSwitching) {
-      return;
-    }
+    if (!existingUser || target.switchRequested || isSwitching) return;
 
     if (hasRecentAutoRedirect(target.returnTo)) {
       setStatus({
@@ -296,19 +102,20 @@ export default function App() {
     };
   }, [existingUser, isSwitching, target.returnTo, target.switchRequested]);
 
-  const onFieldChange = (field: keyof FormState) => (value: string) => {
-    setForm((previous) => ({ ...previous, [field]: value }));
-    if (status.type === 'error') {
-      setStatus({ type: null, message: '' });
-    }
-  };
+  const onFieldChange = useCallback(
+    (field: keyof FormState) => (value: string) => {
+      setForm((previous) => ({ ...previous, [field]: value }));
+      setStatus((previous) => (previous.type === 'error' ? { type: null, message: '' } : previous));
+    },
+    [],
+  );
 
-  const onModeChange = (nextMode: AuthMode) => {
+  const onModeChange = useCallback((nextMode: AuthMode) => {
     setMode(nextMode);
     setStatus({ type: null, message: '' });
-  };
+  }, []);
 
-  const onSwitchAccount = async () => {
+  const onSwitchAccount = useCallback(async () => {
     setIsSwitching(true);
     setStatus({ type: 'info', message: 'Sessie wordt afgemeld...' });
 
@@ -321,6 +128,7 @@ export default function App() {
       }
 
       setExistingUser(null);
+      clearAutoRedirectGuard();
       setStatus({ type: 'success', message: 'Afgemeld. Log nu in met een ander account.' });
       window.history.replaceState({}, '', `${window.location.pathname}?switch=1`);
     } catch {
@@ -328,70 +136,74 @@ export default function App() {
     } finally {
       setIsSwitching(false);
     }
-  };
+  }, []);
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const onSubmit = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
 
-    if (!form.username || !form.password) {
-      setStatus({ type: 'error', message: 'Vul gebruikersnaam en wachtwoord in.' });
-      return;
-    }
+      const normalizedUsername = form.username.trim();
+      const normalizedPassword = mode === 'login' ? form.password.trim() : form.password;
 
-    if (mode === 'register') {
-      const registrationError = validateRegistration(form);
-
-      if (registrationError) {
-        setStatus({ type: 'error', message: registrationError });
+      if (!normalizedUsername || !normalizedPassword) {
+        setStatus({ type: 'error', message: 'Vul gebruikersnaam en wachtwoord in.' });
         return;
       }
-    }
 
-    setStatus({ type: null, message: '' });
-    setIsLoading(true);
+      if (mode === 'register') {
+        const registrationError = validateRegistration(form);
+        if (registrationError) {
+          setStatus({ type: 'error', message: registrationError });
+          return;
+        }
+      }
 
-    try {
-      if (mode === 'login') {
-        const result = await login(form.username, form.password);
+      setStatus({ type: null, message: '' });
+      setIsLoading(true);
 
-        if (!result.ok || !result.data.authenticated) {
-          setStatus({ type: 'error', message: result.data.detail || 'Authenticatie mislukt.' });
+      try {
+        if (mode === 'login') {
+          const result = await login(normalizedUsername, normalizedPassword);
+
+          if (!result.ok || !result.data.authenticated) {
+            setStatus({ type: 'error', message: result.data.detail || 'Authenticatie mislukt.' });
+            return;
+          }
+
+          clearAutoRedirectGuard();
+          setStatus({ type: 'success', message: 'Succesvol ingelogd. Sessie wordt gecontroleerd...' });
+          setExistingUser(typeof result.data.user === 'string' ? result.data.user : normalizedUsername);
+
           return;
         }
 
-        setStatus({ type: 'success', message: 'Succesvol ingelogd. Je wordt doorgestuurd...' });
-        window.setTimeout(() => {
-          redirectTo(target.returnTo, 'assign');
-        }, 800);
+        const result = await register({
+          username: form.username,
+          password: form.password,
+          name: form.name,
+          email: form.email,
+        });
 
-        return;
+        if (!result.ok) {
+          setStatus({ type: 'error', message: result.data.detail || 'Registratie mislukt.' });
+          return;
+        }
+
+        setStatus({ type: 'success', message: 'Account aangemaakt! Je kunt nu inloggen.' });
+        setMode('login');
+        setForm((previous) => ({
+          ...previous,
+          password: '',
+          confirmPassword: '',
+        }));
+      } catch {
+        setStatus({ type: 'error', message: 'Netwerkfout tijdens authenticatie.' });
+      } finally {
+        setIsLoading(false);
       }
-
-      const result = await register({
-        username: form.username,
-        password: form.password,
-        name: form.name,
-        email: form.email,
-      });
-
-      if (!result.ok) {
-        setStatus({ type: 'error', message: result.data.detail || 'Registratie mislukt.' });
-        return;
-      }
-
-      setStatus({ type: 'success', message: 'Account aangemaakt! Je kunt nu inloggen.' });
-      setMode('login');
-      setForm((previous) => ({
-        ...previous,
-        password: '',
-        confirmPassword: '',
-      }));
-    } catch {
-      setStatus({ type: 'error', message: 'Netwerkfout tijdens authenticatie.' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    [form, mode],
+  );
 
   const statusIcon =
     status.type === 'error' ? <AlertCircle size={18} aria-hidden="true" /> : <CheckCircle2 size={18} aria-hidden="true" />;
@@ -410,8 +222,8 @@ export default function App() {
               </span>
               <span className="target-chip">TARGET · {target.returnHost}</span>
             </div>
-            <h1>Prime Command</h1>
-            <p>Log in op de ChefGroep-controlplane via een strikte same-origin API-route.</p>
+            <h1>ChefGroep</h1>
+            <p>Toegang tot het ChefGroep-platform via een beveiligde auth-gateway.</p>
           </header>
 
           <div className="tab-row" role="tablist" aria-label="Authenticatiemodus">
@@ -540,23 +352,25 @@ export default function App() {
           </form>
         </section>
 
-        <aside className="premium-card" aria-label="Premium veiligheid">
+        <aside className="premium-card" aria-label="Platform informatie">
           <div className="premium-head">
-            <Crown size={18} aria-hidden="true" />
-            <span>Premium Security Card</span>
+            <ShieldCheck size={18} aria-hidden="true" />
+            <span>Configureerbare soevereiniteit</span>
           </div>
-          <h2>Worker-backed auth gateway</h2>
+          <h2>Jij bepaalt welke AI de agents gebruiken</h2>
           <p>
-            Frontend en backend zijn strikt gescheiden: de browser praat alleen met <code>/api</code>,
-            terwijl de worker veilig proxyt naar de auth API.
+            ChefGroep levert AI-agents en systemen. Ingebouwd in elk pakket: een
+            routeringslaag die bepaalt naar welke AI-providers de agents verbinding
+            mogen maken. Geen maatwerk — gewoon een instelling.
           </p>
           <ul>
-            <li>Same-origin sessiecookies</li>
-            <li>Geen runtime legacy script pad</li>
-            <li>Reduced-motion en adaptive density inbegrepen</li>
+            <li>🌐 Volledig vrij — alle providers toegestaan</li>
+            <li>🌏 Non-US — alleen Europese &amp; Aziatische AI</li>
+            <li>🇪🇺 Puur Europees — uitsluitend Europese modellen</li>
+            <li>⚙️ Custom — eigen whitelist van providers</li>
           </ul>
           <a href={target.returnTo} className="premium-link">
-            Terug naar doelapp
+            Terug naar platform
           </a>
         </aside>
       </main>

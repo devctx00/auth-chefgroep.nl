@@ -17,15 +17,16 @@ function computeDensity(width: number, height: number): Density {
 }
 
 export function useDensity(): Density {
-  const [density, setDensity] = useState<Density>('comfortable');
+  const [density, setDensity] = useState<Density>(() =>
+    computeDensity(window.innerWidth, window.innerHeight),
+  );
 
   useEffect(() => {
-    const syncDensity = () => setDensity(computeDensity(window.innerWidth, window.innerHeight));
-
-    syncDensity();
-    window.addEventListener('resize', syncDensity);
-
-    return () => window.removeEventListener('resize', syncDensity);
+    const observer = new ResizeObserver(() => {
+      setDensity(computeDensity(window.innerWidth, window.innerHeight));
+    });
+    observer.observe(document.documentElement);
+    return () => observer.disconnect();
   }, []);
 
   return density;

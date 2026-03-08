@@ -11,19 +11,20 @@
     "lint": "eslint frontend backend --max-warnings=0",
     "preview": "vite preview --config frontend/vite.config.ts",
     "test": "npm run test:unit && npm run test:integration",
-    "test:unit": "vitest run --config frontend/vitest.config.ts frontend/src/lib/authContract.test.ts",
+    "test:unit": "vitest run --config frontend/vitest.config.ts frontend/src/lib/authContract.test.ts frontend/src/lib/redirectGuard.test.ts",
     "test:integration": "vitest run --config frontend/vitest.config.ts frontend/src/App.integration.test.tsx && vitest run --config backend/vitest.config.ts backend/functions/api/proxy.integration.test.ts",
     "test:e2e": "playwright test --config frontend/playwright.config.ts",
     "verify": "npm run lint && npm run test && npm run build",
     "verify:full": "npm run verify && npm run test:e2e"
   },
   "dependencies": {
+    "@fontsource-variable/ibm-plex-sans": "^5.1.1",
+    "@fontsource-variable/sora": "^5.2.6",
     "clsx": "^2.1.1",
     "framer-motion": "^12.34.3",
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.13.1",
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {

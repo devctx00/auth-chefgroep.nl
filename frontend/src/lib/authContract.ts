@@ -2,6 +2,7 @@ export const AUTH_HOST_SUFFIX = '.chefgroep.nl';
 export const AUTH_HOST = 'auth.chefgroep.nl';
 export const DEFAULT_RETURN_TO = 'https://mc.chefgroep.nl/mission-control';
 export const USERNAME_REGEX = /^[a-zA-Z0-9_-]{3,20}$/;
+export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type AuthMode = 'login' | 'register';
 
@@ -119,6 +120,10 @@ export function getReturnTarget(
 export function validateRegistration(form: RegistrationPayload): string | null {
   if (!form.name || !form.email || !form.username || !form.password) {
     return 'Vul alle verplichte velden in.';
+  }
+
+  if (!EMAIL_REGEX.test(form.email)) {
+    return 'E-mailadres is ongeldig.';
   }
 
   if (!USERNAME_REGEX.test(form.username)) {

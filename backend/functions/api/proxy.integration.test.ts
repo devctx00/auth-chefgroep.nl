@@ -126,4 +126,95 @@ describe('worker api proxy', () => {
       `return_to=${encodeURIComponent('https://mc.chefgroep.nl/mission-control')}`,
     );
   });
+
+  it('returns 502 when upstream is unreachable', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connection refused'));
+
+    const request = new Request('https://auth.chefgroep.nl/api/auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: 'session=abc',
+      },
+      body: JSON.stringify({ username: 'jan', password: 'pw' }),
+    });
+
+    const response = await onRequest({
+      env: { API_ORIGIN: 'https://api.chefgroep.nl' },
+      request,
+    } as Parameters<typeof onRequest>[0]);
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({ detail: 'Upstream unreachable.' });
+  });
+
+  it('returns 415 when POST /api/auth has non-JSON content-type', async () => {
+    vi.spyOn(globalThis, 'fetch');
+
+    const request = new Request('https://auth.chefgroep.nl/api/auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: 'session=abc',
+      },
+      body: 'username=jan&password=pw',
+    });
+
+    const response = await onRequest({
+      env: { API_ORIGIN: 'https://api.chefgroep.nl' },
+      request,
+    } as Parameters<typeof onRequest>[0]);
+
+    expect(response.status).toBe(415);
+    await expect(response.json()).resolves.toMatchObject({ detail: 'Content-Type must be application/json.' });
+  });
+
+  it('returns 413 when POST /api/auth body exceeds 8 KB', async () => {
+    vi.spyOn(globalThis, 'fetch');
+
+    const largeBody = JSON.stringify({ username: 'a'.repeat(8192), password: 'pw' });
+
+    const request = new Request('https://auth.chefgroep.nl/api/auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: 'session=abc',
+      },
+      body: largeBody,
+    });
+
+    const response = await onRequest({
+      env: { API_ORIGIN: 'https://api.chefgroep.nl' },
+      request,
+    } as Parameters<typeof onRequest>[0]);
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toMatchObject({ detail: 'Request body too large.' });
+  });
+
+  it('forwards CF-Connecting-IP as x-real-ip to upstream', async () => {
+    const upstream = new Response(JSON.stringify({ authenticated: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(upstream);
+
+    const request = new Request('https://auth.chefgroep.nl/api/auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: 'session=abc',
+        'CF-Connecting-IP': '1.2.3.4',
+      },
+      body: JSON.stringify({ username: 'jan', password: 'pw' }),
+    });
+
+    await onRequest({
+      env: { API_ORIGIN: 'https://api.chefgroep.nl' },
+      request,
+    } as Parameters<typeof onRequest>[0]);
+
+    const forwardedHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers as HeadersInit);
+    expect(forwardedHeaders.get('x-real-ip')).toBe('1.2.3.4');
+  });
 });
