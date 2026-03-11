@@ -18,6 +18,9 @@
   --color-edge: rgba(148, 163, 184, 0.08);
   --color-edge-hover: rgba(148, 163, 184, 0.16);
   --color-signal-glow: rgba(45, 212, 191, 0.15);
+  --card-hull-rich: linear-gradient(145deg, rgba(17,24,39,0.85), rgba(10,15,24,0.95));
+  --shadow-card: 0 8px 32px rgba(0,0,0,0.5);
+  --shadow-glow-signal: 0 0 30px rgba(45,212,191,0.2);
 
   --font-display: 'Space Mono', 'JetBrains Mono', monospace;
   --font-body: 'Outfit', 'Inter', system-ui, sans-serif;
